@@ -7,6 +7,7 @@ import {
   Tabs,
   Tooltip,
   Divider,
+  Button,
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -159,34 +160,7 @@ export default function App() {
         setDifficultyRanks(ranks);
 
         // Fetch scores using Rust command
-        const rustResponse: { stats: StatsResult[] } = await invoke(
-          "get_stats",
-          {
-            scenarios: Array.from(allScenarios), // Pass all scenario names to Rust
-          }
-        );
-
-        // Map fetched stats to the scores state
-        const mappedScores = rustResponse.stats.reduce((acc, stat) => {
-          acc[stat.scenario_name] = {
-            rank: "0", // Default rank
-            progress: 0, // Default progress
-            energy: 0, // Default energy
-            highScore: stat.score, // Store the high score
-            kills: stat.kills,
-            hits: stat.hits,
-            misses: stat.misses,
-            fov: stat.fov,
-            fov_scale: stat.fov_scale,
-            resolution: stat.resolution,
-            avg_fps: stat.avg_fps,
-            sens_cm: stat.sens_cm,
-            date: stat.date,
-          };
-          return acc;
-        }, {} as BenchmarkState);
-
-        setScores(mappedScores);
+        await fetchScores(Array.from(allScenarios));
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -194,6 +168,41 @@ export default function App() {
 
     fetchData();
   }, []);
+
+  const fetchScores = async (scenarios: string[]) => {
+    try {
+      const rustResponse: { stats: StatsResult[] } = await invoke("get_stats", {
+        scenarios,
+      });
+
+      const mappedScores = rustResponse.stats.reduce((acc, stat) => {
+        acc[stat.scenario_name] = {
+          rank: "0",
+          progress: 0,
+          energy: 0,
+          highScore: stat.score,
+          kills: stat.kills,
+          hits: stat.hits,
+          misses: stat.misses,
+          fov: stat.fov,
+          fov_scale: stat.fov_scale,
+          resolution: stat.resolution,
+          avg_fps: stat.avg_fps,
+          sens_cm: stat.sens_cm,
+          date: stat.date,
+        };
+        return acc;
+      }, {} as BenchmarkState);
+
+      setScores(mappedScores);
+    } catch (error) {
+      console.error("Error fetching scores:", error);
+    }
+  };
+
+  const refreshScores = async () => {
+    await fetchScores(Object.keys(scores));
+  };
 
   if (!benchmarkData) return <Text>Loading...</Text>;
 
@@ -690,6 +699,11 @@ export default function App() {
           </Tabs.Panel>
         ))}
       </Tabs>
+      <div className="flex justify-center mb-4">
+        <Button onClick={refreshScores} variant="outline" color="blue" radius="md" size="md">
+          Refresh Scores
+        </Button>
+      </div>
     </Stack>
   );
 }

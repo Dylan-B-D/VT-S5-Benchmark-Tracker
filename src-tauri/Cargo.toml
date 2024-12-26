@@ -23,3 +23,28 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 winreg = "0.52"
+
+# Development profile - faster compilation, larger size
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = false
+
+# Release profile - optimized for minimum size
+[profile.release]
+opt-level = "z"  # Use "z" instead of "s" for maximum size reduction
+lto = true       # Enable link-time optimization
+codegen-units = 1  # Maximize optimization opportunities
+panic = "abort"  # Remove panic unwinding code
+strip = true     # Remove debug symbols
+debug = false    # No debug information
+debug-assertions = false
+overflow-checks = false
+incremental = false
+rpath = false
