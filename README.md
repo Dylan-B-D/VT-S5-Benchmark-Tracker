@@ -1,6 +1,6 @@
-# Voltiac Season 5 Benchmark Tracker
+# Voltaic Season 5 Benchmark Tracker
 
-This project is a benchmark tracker for Voltiac Season 5, built with Tauri, using a React frontend.
+A local benchmark tracker for Voltaic Season 5, built with Tauri, using a React frontend. This is still work in progress and may have issues. The score requirements and scenario names are fetched from a gist, so changes do not require the app to be updated.
 
 ## Prerequisites
 
