@@ -312,135 +312,18 @@ export default function App() {
     // Calculate overall energy for the difficulty
     const subcategoryEnergies: number[] = [];
     const totalSubcategories = Object.keys(benchmarkData[difficulty]).reduce(
-      (acc, category) =>
-        acc + Object.keys(benchmarkData[difficulty][category]).length,
+      (acc, category) => acc + Object.keys(benchmarkData[difficulty][category]).length,
       0
     );
 
     Object.entries(benchmarkData[difficulty]).forEach(([, subcategories]) => {
       Object.entries(subcategories).forEach(([, scenarios]) => {
-        let maxEnergy = 0;
-
-        Object.entries(scenarios).forEach(([scenario, thresholds]) => {
-          const scoreData = scores[scenario];
-          if (scoreData && thresholds) {
-            const rankThresholds = Object.entries(thresholds)
-              .sort(([, a], [, b]) => a - b)
-              .map(([rank, threshold]) => ({ rank, threshold }));
-
-            if (scoreData.highScore < rankThresholds[0].threshold) {
-              const lowestRankEnergy = startingEnergy + 0 * ENERGY_INCREMENT;
-              const progress =
-                scoreData.highScore / rankThresholds[0].threshold;
-              maxEnergy = Math.max(maxEnergy, lowestRankEnergy * progress);
-            } else {
-              const highestRank = rankThresholds[rankThresholds.length - 1];
-              const secondHighestRank =
-                rankThresholds[rankThresholds.length - 2];
-              const fakeRankThreshold =
-                highestRank.threshold +
-                (highestRank.threshold - secondHighestRank.threshold);
-              const fakeRankEnergy =
-                startingEnergy +
-                (rankThresholds.length - 1) * ENERGY_INCREMENT +
-                100;
-              rankThresholds.push({
-                rank: "Fake",
-                threshold: fakeRankThreshold,
-              });
-
-              for (let i = 0; i < rankThresholds.length; i++) {
-                const current = rankThresholds[i];
-                const next = rankThresholds[i + 1];
-
-                if (scoreData.highScore >= current.threshold) {
-                  if (next && scoreData.highScore < next.threshold) {
-                    const progress =
-                      (scoreData.highScore - current.threshold) /
-                      (next.threshold - current.threshold);
-                    const energy =
-                      startingEnergy +
-                      i * ENERGY_INCREMENT +
-                      progress * ENERGY_INCREMENT;
-                    maxEnergy = Math.max(maxEnergy, energy);
-                    break;
-                  } else if (!next) {
-                    maxEnergy = Math.max(maxEnergy, fakeRankEnergy);
-                  }
-                }
-              }
-            }
-          }
-        });
-
-        subcategoryEnergies.push(maxEnergy);
+        const energy = calculateSubcategoryEnergy(scenarios, scores, startingEnergy);
+        subcategoryEnergies.push(energy);
       });
     });
 
-    const overallEnergy = calculateHarmonicMean(
-      subcategoryEnergies,
-      totalSubcategories
-    );
-
-    const calculateSubcategoryEnergy = (
-      scenarios: { [key: string]: Threshold },
-      scores: BenchmarkState,
-      startingEnergy: number
-    ): number => {
-      let maxEnergy = 0;
-
-      Object.entries(scenarios).forEach(([scenario, thresholds]) => {
-        const scoreData = scores[scenario];
-        if (!scoreData || !thresholds) return;
-
-        const rankThresholds = Object.entries(thresholds)
-          .sort(([, a], [, b]) => a - b)
-          .map(([rank, threshold]) => ({ rank, threshold }));
-
-        if (scoreData.highScore < rankThresholds[0].threshold) {
-          const progress = scoreData.highScore / rankThresholds[0].threshold;
-          maxEnergy = Math.max(maxEnergy, startingEnergy * progress);
-          return;
-        }
-
-        // Add fake rank for overachievement
-        const highestRank = rankThresholds[rankThresholds.length - 1];
-        const secondHighestRank = rankThresholds[rankThresholds.length - 2];
-        const fakeRankThreshold =
-          highestRank.threshold +
-          (highestRank.threshold - secondHighestRank.threshold);
-
-        rankThresholds.push({
-          rank: "Fake",
-          threshold: fakeRankThreshold,
-        });
-
-        for (let i = 0; i < rankThresholds.length; i++) {
-          const current = rankThresholds[i];
-          const next = rankThresholds[i + 1];
-
-          if (scoreData.highScore >= current.threshold) {
-            if (next && scoreData.highScore < next.threshold) {
-              const progress =
-                (scoreData.highScore - current.threshold) /
-                (next.threshold - current.threshold);
-              const energy =
-                startingEnergy +
-                i * ENERGY_INCREMENT +
-                progress * ENERGY_INCREMENT;
-              maxEnergy = Math.max(maxEnergy, energy);
-              break;
-            } else if (!next) {
-              const fakeRankEnergy =
-                startingEnergy + (rankThresholds.length - 1) * ENERGY_INCREMENT;
-              maxEnergy = Math.max(maxEnergy, fakeRankEnergy);
-            }
-          }
-        }
-      });
-
-      return maxEnergy;
-    };
+    const overallEnergy = calculateHarmonicMean(subcategoryEnergies, totalSubcategories);
 
     return (
       <div className="overflow-x-auto">
@@ -993,4 +876,70 @@ const formatDate = (dateString: string) => {
     parseInt(second)
   );
   return date.toLocaleString();
+};
+
+const calculateScenarioEnergy = (score: number, thresholds: Threshold, startingEnergy: number): number => {
+  const rankThresholds = Object.entries(thresholds)
+    .sort(([, a], [, b]) => a - b)
+    .map(([rank, threshold]) => ({ rank, threshold }));
+
+  // Calculate fake lower rank threshold
+  const lowestRank = rankThresholds[0];
+  const secondLowestRank = rankThresholds[1];
+  const fakeLowerThreshold = lowestRank.threshold - (secondLowestRank.threshold - lowestRank.threshold);
+
+  // Calculate fake upper rank threshold
+  const highestRank = rankThresholds[rankThresholds.length - 1];
+  const secondHighestRank = rankThresholds[rankThresholds.length - 2];
+  const fakeUpperThreshold = highestRank.threshold + (highestRank.threshold - secondHighestRank.threshold);
+
+  // Handle score below fake lower threshold
+  if (score < fakeLowerThreshold) {
+    return (score / fakeLowerThreshold) * (startingEnergy - ENERGY_INCREMENT);
+  }
+  
+  // Handle score between fake lower threshold and lowest real threshold
+  if (score < rankThresholds[0].threshold) {
+    const progress = (score - fakeLowerThreshold) / (lowestRank.threshold - fakeLowerThreshold);
+    return (startingEnergy - ENERGY_INCREMENT) + progress * ENERGY_INCREMENT;
+  }
+
+  // Add fake ranks to the thresholds array
+  const extendedThresholds = [
+    { rank: 'FakeLower', threshold: fakeLowerThreshold },
+    ...rankThresholds,
+    { rank: 'FakeUpper', threshold: fakeUpperThreshold }
+  ];
+
+  // Find appropriate threshold range and calculate energy
+  for (let i = 1; i < extendedThresholds.length; i++) {
+    const current = extendedThresholds[i];
+    const previous = extendedThresholds[i - 1];
+
+    if (score >= previous.threshold && score < current.threshold) {
+      const progress = (score - previous.threshold) / (current.threshold - previous.threshold);
+      return startingEnergy + (i - 2) * ENERGY_INCREMENT + progress * ENERGY_INCREMENT;
+    }
+  }
+
+  // Score is above the highest threshold
+  return startingEnergy + (rankThresholds.length - 1) * ENERGY_INCREMENT + ENERGY_INCREMENT;
+};
+
+const calculateSubcategoryEnergy = (
+  scenarios: { [key: string]: Threshold },
+  scores: BenchmarkState,
+  startingEnergy: number
+): number => {
+  let maxEnergy = 0;
+
+  Object.entries(scenarios).forEach(([scenario, thresholds]) => {
+    const scoreData = scores[scenario];
+    if (scoreData && thresholds) {
+      const energy = calculateScenarioEnergy(scoreData.highScore, thresholds, startingEnergy);
+      maxEnergy = Math.max(maxEnergy, energy);
+    }
+  });
+
+  return maxEnergy;
 };
