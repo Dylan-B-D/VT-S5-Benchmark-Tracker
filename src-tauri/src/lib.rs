@@ -1,9 +1,12 @@
 use std::path::PathBuf;
+use tauri_plugin_window_state::WindowExt;
 use winreg::enums::*;
 use winreg::RegKey;
 use std::fs;
 use serde::Serialize;
 use std::collections::HashMap;
+use tauri::Manager;
+use tauri_plugin_window_state::AppHandleExt;
 
 #[derive(Debug, Serialize, Clone)]
 struct StatsResult {
@@ -206,8 +209,30 @@ fn get_stats(scenarios: Vec<String>) -> Result<PathResult, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build()) 
+        .plugin(tauri_plugin_opener::init()) 
         .invoke_handler(tauri::generate_handler![get_stats])
+        .setup(|app| {
+            // Restore window state for the main window at startup
+            if let Some(window) = app.get_webview_window("main") {
+                use tauri_plugin_window_state::StateFlags;
+                window.restore_state(StateFlags::all()).unwrap_or_else(|err| {
+                    println!("Failed to restore main window state: {}", err);
+                });
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                use tauri_plugin_window_state::StateFlags;
+
+                // Save window state before closing
+                let app_handle = window.app_handle();
+                app_handle.save_window_state(StateFlags::all()).unwrap_or_else(|err| {
+                    println!("Failed to save window state: {}", err);
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -225,7 +225,7 @@ export default function App() {
     await fetchScores(Object.keys(scores));
   };
 
-  useHotkeys([['r', refreshScores]]);
+  useHotkeys([["r", refreshScores]]);
 
   if (!benchmarkData) return <Text>Loading...</Text>;
 
@@ -440,7 +440,8 @@ export default function App() {
                   {rank}
                   <br />
                   <span style={{ fontSize: "0.8em", fontWeight: "normal" }}>
-                    ({startingEnergy + i * ENERGY_INCREMENT} Energy)
+                    ({(startingEnergy + i * ENERGY_INCREMENT).toLocaleString()}{" "}
+                    Energy)
                   </span>
                 </Table.Th>
               ))}
@@ -809,8 +810,6 @@ export default function App() {
 
   return (
     <Stack className="p-4">
-      <Title order={2}>VT Benchmark Tracker</Title>
-
       <Tabs defaultValue="Novice">
         <Tabs.List>
           {Object.keys(difficultyRanks).map((difficulty) => (

@@ -48,3 +48,6 @@ debug-assertions = false
 overflow-checks = false
 incremental = false
 rpath = false
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-window-state = "2"
