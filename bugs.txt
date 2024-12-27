@@ -1,0 +1,3 @@
+S drive doesn't work
+always changes back to novice tab
+refresh doesn't work on a score with no previous score

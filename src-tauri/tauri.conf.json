@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "vt-s5-benchmark-tracker",
+  "productName": "VT S5 Benchmark Tracker",
   "version": "0.1.0",
   "identifier": "com.vt-s5-benchmark-tracker.app",
   "build": {

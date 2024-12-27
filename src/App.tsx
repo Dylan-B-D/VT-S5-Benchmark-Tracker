@@ -231,7 +231,8 @@ export default function App() {
               color: getContrastColor(backgroundColor),
             }}
           >
-            {overallRank} {rankComplete ? "Complete" : ""}
+            {overallRank}{" "}
+            {rankComplete && overallRank !== "Unranked" ? "Complete" : ""}
           </div>
           <div className="text-sm font-bold">
             Overall Energy:{" "}
@@ -247,6 +248,12 @@ export default function App() {
 
     // Calculate overall energy for the difficulty
     const subcategoryEnergies: number[] = [];
+    const totalSubcategories = Object.keys(benchmarkData[difficulty]).reduce(
+      (acc, category) =>
+        acc + Object.keys(benchmarkData[difficulty][category]).length,
+      0
+    );
+
     Object.entries(benchmarkData[difficulty]).forEach(([, subcategories]) => {
       Object.entries(subcategories).forEach(([, scenarios]) => {
         let maxEnergy = 0;
@@ -258,46 +265,119 @@ export default function App() {
               .sort(([, a], [, b]) => a - b)
               .map(([rank, threshold]) => ({ rank, threshold }));
 
-            const highestRank = rankThresholds[rankThresholds.length - 1];
-            const secondHighestRank = rankThresholds[rankThresholds.length - 2];
-            const fakeRankThreshold =
-              highestRank.threshold +
-              (highestRank.threshold - secondHighestRank.threshold);
-            const fakeRankEnergy =
-              startingEnergy +
-              (rankThresholds.length - 1) * ENERGY_INCREMENT +
-              100;
-            rankThresholds.push({ rank: "Fake", threshold: fakeRankThreshold });
+            if (scoreData.highScore < rankThresholds[0].threshold) {
+              const lowestRankEnergy = startingEnergy + 0 * ENERGY_INCREMENT;
+              const progress =
+                scoreData.highScore / rankThresholds[0].threshold;
+              maxEnergy = Math.max(maxEnergy, lowestRankEnergy * progress);
+            } else {
+              const highestRank = rankThresholds[rankThresholds.length - 1];
+              const secondHighestRank =
+                rankThresholds[rankThresholds.length - 2];
+              const fakeRankThreshold =
+                highestRank.threshold +
+                (highestRank.threshold - secondHighestRank.threshold);
+              const fakeRankEnergy =
+                startingEnergy +
+                (rankThresholds.length - 1) * ENERGY_INCREMENT +
+                100;
+              rankThresholds.push({
+                rank: "Fake",
+                threshold: fakeRankThreshold,
+              });
 
-            for (let i = 0; i < rankThresholds.length; i++) {
-              const current = rankThresholds[i];
-              const next = rankThresholds[i + 1];
+              for (let i = 0; i < rankThresholds.length; i++) {
+                const current = rankThresholds[i];
+                const next = rankThresholds[i + 1];
 
-              if (scoreData.highScore < current.threshold) {
-                maxEnergy = Math.max(maxEnergy, 0);
-                break;
-              } else if (next && scoreData.highScore < next.threshold) {
-                const progress =
-                  (scoreData.highScore - current.threshold) /
-                  (next.threshold - current.threshold);
-                const energy =
-                  startingEnergy +
-                  i * ENERGY_INCREMENT +
-                  progress * ENERGY_INCREMENT;
-                maxEnergy = Math.max(maxEnergy, energy);
-                break;
-              } else if (!next) {
-                maxEnergy = Math.max(maxEnergy, fakeRankEnergy);
+                if (scoreData.highScore >= current.threshold) {
+                  if (next && scoreData.highScore < next.threshold) {
+                    const progress =
+                      (scoreData.highScore - current.threshold) /
+                      (next.threshold - current.threshold);
+                    const energy =
+                      startingEnergy +
+                      i * ENERGY_INCREMENT +
+                      progress * ENERGY_INCREMENT;
+                    maxEnergy = Math.max(maxEnergy, energy);
+                    break;
+                  } else if (!next) {
+                    maxEnergy = Math.max(maxEnergy, fakeRankEnergy);
+                  }
+                }
               }
             }
           }
         });
 
-        if (maxEnergy > 0) subcategoryEnergies.push(maxEnergy);
+        subcategoryEnergies.push(maxEnergy);
       });
     });
 
-    const overallEnergy = calculateHarmonicMean(subcategoryEnergies);
+    const overallEnergy = calculateHarmonicMean(
+      subcategoryEnergies,
+      totalSubcategories
+    );
+
+    const calculateSubcategoryEnergy = (
+      scenarios: { [key: string]: Threshold },
+      scores: BenchmarkState,
+      startingEnergy: number
+    ): number => {
+      let maxEnergy = 0;
+
+      Object.entries(scenarios).forEach(([scenario, thresholds]) => {
+        const scoreData = scores[scenario];
+        if (!scoreData || !thresholds) return;
+
+        const rankThresholds = Object.entries(thresholds)
+          .sort(([, a], [, b]) => a - b)
+          .map(([rank, threshold]) => ({ rank, threshold }));
+
+        if (scoreData.highScore < rankThresholds[0].threshold) {
+          const progress = scoreData.highScore / rankThresholds[0].threshold;
+          maxEnergy = Math.max(maxEnergy, startingEnergy * progress);
+          return;
+        }
+
+        // Add fake rank for overachievement
+        const highestRank = rankThresholds[rankThresholds.length - 1];
+        const secondHighestRank = rankThresholds[rankThresholds.length - 2];
+        const fakeRankThreshold =
+          highestRank.threshold +
+          (highestRank.threshold - secondHighestRank.threshold);
+
+        rankThresholds.push({
+          rank: "Fake",
+          threshold: fakeRankThreshold,
+        });
+
+        for (let i = 0; i < rankThresholds.length; i++) {
+          const current = rankThresholds[i];
+          const next = rankThresholds[i + 1];
+
+          if (scoreData.highScore >= current.threshold) {
+            if (next && scoreData.highScore < next.threshold) {
+              const progress =
+                (scoreData.highScore - current.threshold) /
+                (next.threshold - current.threshold);
+              const energy =
+                startingEnergy +
+                i * ENERGY_INCREMENT +
+                progress * ENERGY_INCREMENT;
+              maxEnergy = Math.max(maxEnergy, energy);
+              break;
+            } else if (!next) {
+              const fakeRankEnergy =
+                startingEnergy + (rankThresholds.length - 1) * ENERGY_INCREMENT;
+              maxEnergy = Math.max(maxEnergy, fakeRankEnergy);
+            }
+          }
+        }
+      });
+
+      return maxEnergy;
+    };
 
     return (
       <div className="overflow-x-auto">
@@ -419,52 +499,55 @@ export default function App() {
                         );
 
                         // Determine progress for this scenario
-                        let progress = 100;
+
+                        let progress = 0;
                         let nextRankColor = "#FFFFFF";
 
                         if (scoreData && thresholds) {
                           const rankThresholds = Object.entries(
                             thresholds
-                          ).sort(
-                            ([, a], [, b]) => a - b // Sort by threshold value
-                          );
+                          ).sort(([, a], [, b]) => a - b);
 
-                          for (let i = 0; i < rankThresholds.length; i++) {
-                            const [rank, threshold] = rankThresholds[i];
-                            const nextThreshold = rankThresholds[i + 1]?.[1];
+                          // Handle unranked case
+                          if (scoreData.highScore < rankThresholds[0][1]) {
+                            progress =
+                              (scoreData.highScore / rankThresholds[0][1]) *
+                              100;
+                            nextRankColor =
+                              RANK_COLORS[
+                                rankThresholds[0][0] as keyof typeof RANK_COLORS
+                              ];
+                          } else {
+                            // Find current rank
+                            let currentRankIndex = -1;
+                            for (let i = 0; i < rankThresholds.length; i++) {
+                              if (scoreData.highScore >= rankThresholds[i][1]) {
+                                currentRankIndex = i;
+                              }
+                            }
 
-                            if (scoreData.highScore < threshold) {
-                              // Not yet at the first rank
-                              progress = Math.min(
-                                (scoreData.highScore / threshold) * 100,
-                                100
-                              );
+                            if (currentRankIndex < rankThresholds.length - 1) {
+                              const [_currentRank, currentThreshold] =
+                                rankThresholds[currentRankIndex];
+                              const [nextRank, nextThreshold] =
+                                rankThresholds[currentRankIndex + 1];
+
+                              progress =
+                                ((scoreData.highScore - currentThreshold) /
+                                  (nextThreshold - currentThreshold)) *
+                                100;
                               nextRankColor =
-                                RANK_COLORS[rank as keyof typeof RANK_COLORS];
-                              break;
-                            } else if (
-                              scoreData.highScore >= threshold &&
-                              nextThreshold
-                            ) {
-                              // Between ranks
-                              progress = Math.min(
-                                ((scoreData.highScore - threshold) /
-                                  (nextThreshold - threshold)) *
-                                  100,
-                                100
-                              );
+                                RANK_COLORS[
+                                  nextRank as keyof typeof RANK_COLORS
+                                ];
+                            } else {
+                              progress = 100;
                               nextRankColor =
                                 RANK_COLORS[
                                   rankThresholds[
-                                    i + 1
+                                    currentRankIndex
                                   ][0] as keyof typeof RANK_COLORS
                                 ];
-                            } else if (!nextThreshold) {
-                              // At or beyond the highest rank
-                              progress = 100;
-                              nextRankColor =
-                                RANK_COLORS[rank as keyof typeof RANK_COLORS];
-                              break;
                             }
                           }
                         }
@@ -607,7 +690,7 @@ export default function App() {
                                   width: "100%",
                                   backgroundColor: lightenColor(
                                     nextRankColor,
-                                    0.7
+                                    0.75
                                   ),
                                   position: "relative",
                                   borderRadius: "5px",
@@ -630,15 +713,28 @@ export default function App() {
                                 className="w-32 text-center"
                                 style={{
                                   backgroundColor: lightenColor(
-                                    nextRankColor,
+                                    RANK_COLORS[
+                                      scoreRank as keyof typeof RANK_COLORS
+                                    ] || "#FFFFFF",
                                     0.5
                                   ),
                                   color: getContrastColor(
-                                    lightenColor(nextRankColor, 0.5)
+                                    lightenColor(
+                                      RANK_COLORS[
+                                        scoreRank as keyof typeof RANK_COLORS
+                                      ] || "#FFFFFF",
+                                      0.5
+                                    )
                                   ),
                                 }}
                               >
-                                {Math.floor(maxEnergy)}
+                                {Math.floor(
+                                  calculateSubcategoryEnergy(
+                                    scenarios,
+                                    scores,
+                                    startingEnergy
+                                  )
+                                )}
                               </Table.Td>
                             )}
                             {/* Rank Threshold Columns */}
@@ -700,7 +796,13 @@ export default function App() {
         ))}
       </Tabs>
       <div className="flex justify-center mb-4">
-        <Button onClick={refreshScores} variant="outline" color="blue" radius="md" size="md">
+        <Button
+          onClick={refreshScores}
+          variant="outline"
+          color="blue"
+          radius="md"
+          size="md"
+        >
           Refresh Scores
         </Button>
       </div>
@@ -761,15 +863,10 @@ const calculateStartingEnergy = (
   return startingEnergy + ENERGY_BASE;
 };
 
-const calculateHarmonicMean = (values: number[]) => {
-  const nonZeroValues = values.filter((v) => v > 0);
-  if (nonZeroValues.length === 0) return 0;
-
-  const reciprocalSum = nonZeroValues.reduce(
-    (sum, value) => sum + 1 / value,
-    0
-  );
-  return nonZeroValues.length / reciprocalSum;
+const calculateHarmonicMean = (values: number[], expectedCount: number) => {
+  if (values.length !== expectedCount || values.some((v) => v === 0)) return 0;
+  const reciprocalSum = values.reduce((sum, value) => sum + 1 / value, 0);
+  return values.length / reciprocalSum;
 };
 
 const calculateOverallRank = (
