@@ -21,6 +21,7 @@ npm install
 To start the application in development mode, run:
 ```sh
 npx tauri dev
+```
 
 ## Screenshot
 
