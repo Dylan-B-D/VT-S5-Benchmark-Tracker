@@ -96,6 +96,27 @@ fn parse_csv_file(path: &PathBuf) -> Option<StatsResult> {
     })
 }
 
+fn get_steam_library_paths(install_path: &str) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let library_file = PathBuf::from(install_path)
+        .join("steamapps")
+        .join("libraryfolders.vdf");
+
+    if let Ok(content) = fs::read_to_string(&library_file) {
+        for line in content.lines() {
+            if let Some(path) = line.split('"').nth(3) {
+                let library_path = PathBuf::from(path).join("steamapps");
+                paths.push(library_path);
+            }
+        }
+    }
+
+    // Add the default library path as well
+    paths.push(PathBuf::from(install_path).join("steamapps"));
+
+    paths
+}
+
 
 #[tauri::command]
 fn get_stats(scenarios: Vec<String>) -> Result<PathResult, String> {
@@ -111,44 +132,54 @@ fn get_stats(scenarios: Vec<String>) -> Result<PathResult, String> {
             .get_value("InstallPath")
             .map_err(|e| format!("Failed to get Steam install path: {}", e))?;
 
-        let mut stats_path = PathBuf::from(install_path);
-        stats_path.push("steamapps");
-        stats_path.push("common");
-        stats_path.push("FPSAimTrainer");
-        stats_path.push("FPSAimTrainer");
-        stats_path.push("stats");
+        let library_paths = get_steam_library_paths(&install_path);
 
-        let mut stats = Vec::new();
-        let mut scenario_highscores: HashMap<String, StatsResult> = HashMap::new();
+        // Temp fallback path for testing
+        let fallback_path = PathBuf::from(r"S:\SteamLibrary\steamapps\common\FPSAimTrainer\FPSAimTrainer\stats");
+        let mut all_paths = library_paths.clone();
+        all_paths.push(fallback_path);
 
-        if stats_path.exists() {
-            if let Ok(entries) = fs::read_dir(&stats_path) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("csv") {
-                        if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                            if scenarios.iter().any(|scenario| filename.starts_with(scenario)) {
-                                if let Some(stat) = parse_csv_file(&path) {
-                                    let entry = scenario_highscores.entry(stat.scenario_name.clone()).or_insert(stat.clone());
-                                    if stat.score > entry.score {
-                                        *entry = stat;
+        for library_path in library_paths {
+            let stats_path = library_path.join("common/FPSAimTrainer/FPSAimTrainer/stats");
+
+            if stats_path.exists() {
+                let mut stats = Vec::new();
+                let mut scenario_highscores: HashMap<String, StatsResult> = HashMap::new();
+
+                if let Ok(entries) = fs::read_dir(&stats_path) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("csv") {
+                            if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                                if scenarios.iter().any(|scenario| filename.starts_with(scenario)) {
+                                    if let Some(stat) = parse_csv_file(&path) {
+                                        let entry = scenario_highscores.entry(stat.scenario_name.clone()).or_insert(stat.clone());
+                                        if stat.score > entry.score {
+                                            *entry = stat;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                for (_, stat) in scenario_highscores {
+                    stats.push(stat);
+                }
+
+                return Ok(PathResult {
+                    stats_path: stats_path.to_string_lossy().into_owned(),
+                    exists: true,
+                    stats
+                });
             }
         }
 
-        for (_, stat) in scenario_highscores {
-            stats.push(stat);
-        }
-
         Ok(PathResult {
-            stats_path: stats_path.to_string_lossy().into_owned(),
-            exists: stats_path.exists(),
-            stats
+            stats_path: "No stats path found".into(),
+            exists: false,
+            stats: Vec::new()
         })
     }
 

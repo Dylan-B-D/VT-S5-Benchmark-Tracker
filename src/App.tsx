@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Table,
   Text,
-  Title,
   Stack,
   Tabs,
   Tooltip,
@@ -11,6 +10,7 @@ import {
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 import { useHotkeys } from "@mantine/hooks";
+import { writeFile, readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 
 interface Threshold {
   [key: string]: number;
@@ -226,6 +226,44 @@ export default function App() {
   };
 
   useHotkeys([["r", refreshScores]]);
+
+  // Custom hook for persistent tab state
+  const usePersistedTab = () => {
+    const [activeTab, setActiveTab] = useState<string>("Novice");
+  
+    useEffect(() => {
+      const loadTab = async () => {
+        try {
+          const saved = await readTextFile('active-tab.txt', { 
+            baseDir: BaseDirectory.AppLocalData 
+          });
+          setActiveTab(saved);
+        } catch {
+          const localTab = localStorage.getItem('activeTab');
+          if (localTab) setActiveTab(localTab);
+        }
+      };
+      loadTab();
+    }, []);
+  
+    const updateTab = async (newTab: string) => {
+      setActiveTab(newTab);
+      localStorage.setItem('activeTab', newTab);
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(newTab);
+        await writeFile('active-tab.txt', data, { 
+          baseDir: BaseDirectory.AppLocalData 
+        });
+      } catch (e) {
+        console.error('Failed to save to fs:', e);
+      }
+    };
+  
+    return [activeTab, updateTab] as const;
+  };
+
+  const [activeTab, setActiveTab] = usePersistedTab();
 
   if (!benchmarkData) return <Text>Loading...</Text>;
 
@@ -810,7 +848,7 @@ export default function App() {
 
   return (
     <Stack className="p-4">
-      <Tabs defaultValue="Novice">
+      <Tabs value={activeTab} onChange={(value) => setActiveTab(value as string)}>
         <Tabs.List>
           {Object.keys(difficultyRanks).map((difficulty) => (
             <Tabs.Tab key={difficulty} value={difficulty}>
