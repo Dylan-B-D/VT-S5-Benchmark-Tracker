@@ -25,4 +25,4 @@ npx tauri dev
 
 ## Screenshot
 
-![Image of tool]({E531B7A2-4E88-4789-8122-811601C75751}.png)
+![Image of tool](example.png)
