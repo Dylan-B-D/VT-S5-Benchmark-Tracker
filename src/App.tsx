@@ -10,6 +10,7 @@ import {
   Button,
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
+import { useHotkeys } from "@mantine/hooks";
 
 interface Threshold {
   [key: string]: number;
@@ -175,8 +176,29 @@ export default function App() {
         scenarios,
       });
 
-      const mappedScores = rustResponse.stats.reduce((acc, stat) => {
-        acc[stat.scenario_name] = {
+      // Create initial state with all scenarios
+      const initialScores = scenarios.reduce((acc, scenario) => {
+        acc[scenario] = {
+          rank: "Unranked",
+          progress: 0,
+          energy: 0,
+          highScore: 0,
+          kills: 0,
+          hits: 0,
+          misses: 0,
+          fov: 0,
+          fov_scale: "",
+          resolution: "",
+          avg_fps: 0,
+          sens_cm: null,
+          date: "",
+        };
+        return acc;
+      }, {} as BenchmarkState);
+
+      // Update with actual scores
+      rustResponse.stats.forEach((stat) => {
+        initialScores[stat.scenario_name] = {
           rank: "0",
           progress: 0,
           energy: 0,
@@ -191,10 +213,9 @@ export default function App() {
           sens_cm: stat.sens_cm,
           date: stat.date,
         };
-        return acc;
-      }, {} as BenchmarkState);
+      });
 
-      setScores(mappedScores);
+      setScores(initialScores);
     } catch (error) {
       console.error("Error fetching scores:", error);
     }
@@ -203,6 +224,8 @@ export default function App() {
   const refreshScores = async () => {
     await fetchScores(Object.keys(scores));
   };
+
+  useHotkeys([['r', refreshScores]]);
 
   if (!benchmarkData) return <Text>Loading...</Text>;
 
@@ -236,7 +259,9 @@ export default function App() {
           </div>
           <div className="text-sm font-bold">
             Overall Energy:{" "}
-            <span className="font-normal">{overallEnergy.toFixed(1)}</span>
+            <span className="font-normal">
+              {parseFloat(overallEnergy.toFixed(1)).toString()}
+            </span>
           </div>
         </div>
       </div>
@@ -397,7 +422,7 @@ export default function App() {
                 Energy
                 <br />
                 <span style={{ fontSize: "0.8em", fontWeight: "normal" }}>
-                  Overall: {overallEnergy.toFixed(1)}
+                  Overall: {parseFloat(overallEnergy.toFixed(1)).toString()}
                 </span>
               </Table.Th>
               {difficultyRanks[difficulty].map((rank, i) => (
@@ -680,7 +705,11 @@ export default function App() {
                                     : "#000",
                               }}
                             >
-                              {scoreData ? scoreData.highScore.toFixed(2) : "-"}
+                              {scoreData
+                                ? parseFloat(scoreData.highScore.toFixed(2))
+                                    .toString()
+                                    .replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                                : "-"}
                             </Table.Td>
                             {/* Progress Column */}
                             <Table.Td className="w-32 text-center">
@@ -734,7 +763,7 @@ export default function App() {
                                     scores,
                                     startingEnergy
                                   )
-                                )}
+                                ).toLocaleString()}
                               </Table.Td>
                             )}
                             {/* Rank Threshold Columns */}
@@ -759,7 +788,9 @@ export default function App() {
                                   ),
                                 }}
                               >
-                                {thresholds[rank] || "-"}
+                                {thresholds[rank]
+                                  ? thresholds[rank].toLocaleString()
+                                  : "-"}
                               </Table.Td>
                             ))}
                           </Table.Tr>
@@ -803,7 +834,7 @@ export default function App() {
           radius="md"
           size="md"
         >
-          Refresh Scores
+          Refresh Scores [R]
         </Button>
       </div>
     </Stack>
