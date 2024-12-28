@@ -10,7 +10,7 @@ import {
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 import { useHotkeys } from "@mantine/hooks";
-import { writeFile, readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { writeFile, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 
 interface Threshold {
   [key: string]: number;
@@ -230,36 +230,36 @@ export default function App() {
   // Custom hook for persistent tab state
   const usePersistedTab = () => {
     const [activeTab, setActiveTab] = useState<string>("Novice");
-  
+
     useEffect(() => {
       const loadTab = async () => {
         try {
-          const saved = await readTextFile('active-tab.txt', { 
-            baseDir: BaseDirectory.AppLocalData 
+          const saved = await readTextFile("active-tab.txt", {
+            baseDir: BaseDirectory.AppLocalData,
           });
           setActiveTab(saved);
         } catch {
-          const localTab = localStorage.getItem('activeTab');
+          const localTab = localStorage.getItem("activeTab");
           if (localTab) setActiveTab(localTab);
         }
       };
       loadTab();
     }, []);
-  
+
     const updateTab = async (newTab: string) => {
       setActiveTab(newTab);
-      localStorage.setItem('activeTab', newTab);
+      localStorage.setItem("activeTab", newTab);
       try {
         const encoder = new TextEncoder();
         const data = encoder.encode(newTab);
-        await writeFile('active-tab.txt', data, { 
-          baseDir: BaseDirectory.AppLocalData 
+        await writeFile("active-tab.txt", data, {
+          baseDir: BaseDirectory.AppLocalData,
         });
       } catch (e) {
-        console.error('Failed to save to fs:', e);
+        console.error("Failed to save to fs:", e);
       }
     };
-  
+
     return [activeTab, updateTab] as const;
   };
 
@@ -312,18 +312,26 @@ export default function App() {
     // Calculate overall energy for the difficulty
     const subcategoryEnergies: number[] = [];
     const totalSubcategories = Object.keys(benchmarkData[difficulty]).reduce(
-      (acc, category) => acc + Object.keys(benchmarkData[difficulty][category]).length,
+      (acc, category) =>
+        acc + Object.keys(benchmarkData[difficulty][category]).length,
       0
     );
 
     Object.entries(benchmarkData[difficulty]).forEach(([, subcategories]) => {
       Object.entries(subcategories).forEach(([, scenarios]) => {
-        const energy = calculateSubcategoryEnergy(scenarios, scores, startingEnergy);
+        const energy = calculateSubcategoryEnergy(
+          scenarios,
+          scores,
+          startingEnergy
+        );
         subcategoryEnergies.push(energy);
       });
     });
 
-    const overallEnergy = calculateHarmonicMean(subcategoryEnergies, totalSubcategories);
+    const overallEnergy = calculateHarmonicMean(
+      subcategoryEnergies,
+      totalSubcategories
+    );
 
     return (
       <div className="overflow-x-auto">
@@ -612,19 +620,19 @@ export default function App() {
                               className="w-32 text-center"
                               style={{
                                 backgroundColor:
-                                  scoreRank !== "Unranked"
-                                    ? RANK_COLORS[
+                                  scoreRank === "Unranked"
+                                    ? "none"
+                                    : RANK_COLORS[
                                         scoreRank as keyof typeof RANK_COLORS
-                                      ]
-                                    : "#FFFFFF",
+                                      ],
                                 color:
-                                  scoreRank !== "Unranked"
-                                    ? getContrastColor(
+                                  scoreRank === "Unranked"
+                                    ? "#FFFFFF"
+                                    : getContrastColor(
                                         RANK_COLORS[
                                           scoreRank as keyof typeof RANK_COLORS
                                         ]
-                                      )
-                                    : "#000",
+                                      ),
                               }}
                             >
                               {scoreData
@@ -663,20 +671,38 @@ export default function App() {
                                 rowSpan={Object.keys(scenarios).length}
                                 className="w-32 text-center"
                                 style={{
-                                  backgroundColor: lightenColor(
-                                    RANK_COLORS[
-                                      scoreRank as keyof typeof RANK_COLORS
-                                    ] || "#FFFFFF",
-                                    0.5
-                                  ),
-                                  color: getContrastColor(
-                                    lightenColor(
-                                      RANK_COLORS[
-                                        scoreRank as keyof typeof RANK_COLORS
-                                      ] || "#FFFFFF",
-                                      0.5
-                                    )
-                                  ),
+                                  backgroundColor:
+                                    getHighestScenarioRank(
+                                      scenarios,
+                                      scores
+                                    ) === "Unranked"
+                                      ? "none"
+                                      : lightenColor(
+                                          RANK_COLORS[
+                                            getHighestScenarioRank(
+                                              scenarios,
+                                              scores
+                                            ) as keyof typeof RANK_COLORS
+                                          ] || "none",
+                                          0.5
+                                        ),
+                                  color:
+                                    getHighestScenarioRank(
+                                      scenarios,
+                                      scores
+                                    ) === "Unranked"
+                                      ? "#FFFFFF"
+                                      : getContrastColor(
+                                          lightenColor(
+                                            RANK_COLORS[
+                                              getHighestScenarioRank(
+                                                scenarios,
+                                                scores
+                                              ) as keyof typeof RANK_COLORS
+                                            ] || "none",
+                                            0.5
+                                          )
+                                        ),
                                 }}
                               >
                                 {Math.floor(
@@ -731,7 +757,10 @@ export default function App() {
 
   return (
     <Stack className="p-4">
-      <Tabs value={activeTab} onChange={(value) => setActiveTab(value as string)}>
+      <Tabs
+        value={activeTab}
+        onChange={(value) => setActiveTab(value as string)}
+      >
         <Tabs.List>
           {Object.keys(difficultyRanks).map((difficulty) => (
             <Tabs.Tab key={difficulty} value={difficulty}>
@@ -878,7 +907,11 @@ const formatDate = (dateString: string) => {
   return date.toLocaleString();
 };
 
-const calculateScenarioEnergy = (score: number, thresholds: Threshold, startingEnergy: number): number => {
+const calculateScenarioEnergy = (
+  score: number,
+  thresholds: Threshold,
+  startingEnergy: number
+): number => {
   const rankThresholds = Object.entries(thresholds)
     .sort(([, a], [, b]) => a - b)
     .map(([rank, threshold]) => ({ rank, threshold }));
@@ -886,29 +919,34 @@ const calculateScenarioEnergy = (score: number, thresholds: Threshold, startingE
   // Calculate fake lower rank threshold
   const lowestRank = rankThresholds[0];
   const secondLowestRank = rankThresholds[1];
-  const fakeLowerThreshold = lowestRank.threshold - (secondLowestRank.threshold - lowestRank.threshold);
+  const fakeLowerThreshold =
+    lowestRank.threshold - (secondLowestRank.threshold - lowestRank.threshold);
 
   // Calculate fake upper rank threshold
   const highestRank = rankThresholds[rankThresholds.length - 1];
   const secondHighestRank = rankThresholds[rankThresholds.length - 2];
-  const fakeUpperThreshold = highestRank.threshold + (highestRank.threshold - secondHighestRank.threshold);
+  const fakeUpperThreshold =
+    highestRank.threshold +
+    (highestRank.threshold - secondHighestRank.threshold);
 
   // Handle score below fake lower threshold
   if (score < fakeLowerThreshold) {
     return (score / fakeLowerThreshold) * (startingEnergy - ENERGY_INCREMENT);
   }
-  
+
   // Handle score between fake lower threshold and lowest real threshold
   if (score < rankThresholds[0].threshold) {
-    const progress = (score - fakeLowerThreshold) / (lowestRank.threshold - fakeLowerThreshold);
-    return (startingEnergy - ENERGY_INCREMENT) + progress * ENERGY_INCREMENT;
+    const progress =
+      (score - fakeLowerThreshold) /
+      (lowestRank.threshold - fakeLowerThreshold);
+    return startingEnergy - ENERGY_INCREMENT + progress * ENERGY_INCREMENT;
   }
 
   // Add fake ranks to the thresholds array
   const extendedThresholds = [
-    { rank: 'FakeLower', threshold: fakeLowerThreshold },
+    { rank: "FakeLower", threshold: fakeLowerThreshold },
     ...rankThresholds,
-    { rank: 'FakeUpper', threshold: fakeUpperThreshold }
+    { rank: "FakeUpper", threshold: fakeUpperThreshold },
   ];
 
   // Find appropriate threshold range and calculate energy
@@ -917,13 +955,22 @@ const calculateScenarioEnergy = (score: number, thresholds: Threshold, startingE
     const previous = extendedThresholds[i - 1];
 
     if (score >= previous.threshold && score < current.threshold) {
-      const progress = (score - previous.threshold) / (current.threshold - previous.threshold);
-      return startingEnergy + (i - 2) * ENERGY_INCREMENT + progress * ENERGY_INCREMENT;
+      const progress =
+        (score - previous.threshold) / (current.threshold - previous.threshold);
+      return (
+        startingEnergy +
+        (i - 2) * ENERGY_INCREMENT +
+        progress * ENERGY_INCREMENT
+      );
     }
   }
 
   // Score is above the highest threshold
-  return startingEnergy + (rankThresholds.length - 1) * ENERGY_INCREMENT + ENERGY_INCREMENT;
+  return (
+    startingEnergy +
+    (rankThresholds.length - 1) * ENERGY_INCREMENT +
+    ENERGY_INCREMENT
+  );
 };
 
 const calculateSubcategoryEnergy = (
@@ -936,10 +983,40 @@ const calculateSubcategoryEnergy = (
   Object.entries(scenarios).forEach(([scenario, thresholds]) => {
     const scoreData = scores[scenario];
     if (scoreData && thresholds) {
-      const energy = calculateScenarioEnergy(scoreData.highScore, thresholds, startingEnergy);
+      const energy = calculateScenarioEnergy(
+        scoreData.highScore,
+        thresholds,
+        startingEnergy
+      );
       maxEnergy = Math.max(maxEnergy, energy);
     }
   });
 
   return maxEnergy;
+};
+
+const getHighestScenarioRank = (
+  scenarios: { [key: string]: Threshold },
+  scores: BenchmarkState
+) => {
+  let highestRank = "Unranked";
+  let highestThresholdMet = -Infinity;
+
+  Object.entries(scenarios).forEach(([scenario, thresholds]) => {
+    const scoreData = scores[scenario];
+    if (scoreData) {
+      // Find the highest rank achieved for this scenario
+      for (const [rank, threshold] of Object.entries(thresholds)) {
+        if (
+          scoreData.highScore >= threshold &&
+          threshold > highestThresholdMet
+        ) {
+          highestRank = rank;
+          highestThresholdMet = threshold;
+        }
+      }
+    }
+  });
+
+  return highestRank;
 };
