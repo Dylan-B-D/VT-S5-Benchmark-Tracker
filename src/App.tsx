@@ -642,17 +642,17 @@ export default function App() {
                                 : "-"}
                             </Table.Td>
                             {/* Progress Column */}
-                            <Table.Td className="w-32 text-center">
+                            <Table.Td className="w-32 text-center p-0 m-0">
                               <div
                                 style={{
-                                  height: "20px",
+                                  height: "36px",
                                   width: "100%",
                                   backgroundColor: lightenColor(
                                     nextRankColor,
                                     0.75
                                   ),
                                   position: "relative",
-                                  borderRadius: "5px",
+                                  borderRadius: "0px",
                                   overflow: "hidden",
                                 }}
                               >
