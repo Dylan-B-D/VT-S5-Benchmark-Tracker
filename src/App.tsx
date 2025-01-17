@@ -6,111 +6,39 @@ import {
   Tabs,
   Tooltip,
   Divider,
-  Button,
+  Badge,
+  ActionIcon,
+  Switch,
 } from "@mantine/core";
 import { invoke } from "@tauri-apps/api/core";
 import { useHotkeys } from "@mantine/hooks";
-import { writeFile, readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-
-interface Threshold {
-  [key: string]: number;
-}
-
-interface Scenario {
-  [key: string]: Threshold;
-}
-
-interface Subcategory {
-  [key: string]: Scenario;
-}
-
-interface Category {
-  [key: string]: Subcategory;
-}
-
-interface BenchmarkData {
-  Novice: Category;
-  Intermediate: Category;
-  Advanced: Category;
-}
-
-type Difficulty = "Novice" | "Intermediate" | "Advanced";
-type ScoreData = {
-  rank: string;
-  progress: number;
-  energy: number;
-  highScore: number;
-  kills: number;
-  hits: number;
-  misses: number;
-  fov: number;
-  fov_scale: string;
-  resolution: string;
-  avg_fps: number;
-  sens_cm: [number, number] | null;
-  date: string;
-};
-
-interface StatsResult {
-  scenario_name: string;
-  score: number;
-  kills: number;
-  hits: number;
-  misses: number;
-  sens_cm: [number, number] | null;
-  fov: number;
-  fov_scale: string;
-  resolution: string;
-  avg_fps: number;
-  date: string;
-}
-
-interface BenchmarkState {
-  [key: string]: ScoreData;
-}
-
-const RANK_COLORS = {
-  // General
-  Unranked: "#E3F2FD",
-  // Novice ranks
-  Iron: "#787878",
-  Bronze: "#CD7F32",
-  Silver: "#C0C0C0",
-  Gold: "#FFD700",
-  // Intermediate ranks
-  Platinum: "#00CED1",
-  Diamond: "#B9F2FF",
-  Jade: "#00A86B",
-  Master: "#FF69B4",
-  // Advanced ranks
-  Grandmaster: "#FFD700",
-  Nova: "#9C27B0",
-  Astra: "#E91E63",
-  Celestial: "#424242",
-};
-
-const CATEGORY_COLORS: { [key: string]: string } = {
-  Clicking: "#FFB3B3", // Red
-  Tracking: "#B3D9FF", // Blue
-  Switching: "#D9B3FF", // Purple
-};
-
-const SUBCATEGORY_COLORS: { [key: string]: string } = {
-  Dynamic: "#FFE5B4", // Light Yellow
-  Static: "#FFC0C0", // Light Red
-  Linear: "#FFD9C0", // Light Peach
-  Precise: "#C0E5FF", // Light Cyan
-  Reactive: "#B4FFFF", // Aqua
-  Control: "#D9F3FF", // Light Blue
-  Speed: "#E5CFFF", // Light Lavender
-  Evasive: "#EBD9FF", // Light Purple
-  Stability: "#F5E5FF", // Light Pinkish Purple
-};
-
-const ENERGY_BASE = 100; // Base energy for the first rank
-const ENERGY_INCREMENT = 100; // Increment per rank
+import {
+  BenchmarkData,
+  BenchmarkState,
+  Category,
+  CATEGORY_COLORS,
+  Difficulty,
+  ENERGY_INCREMENT,
+  RANK_COLORS,
+  StatsResult,
+  Subcategory,
+  SUBCATEGORY_COLORS,
+} from "./models";
+import {
+  calculateHarmonicMean,
+  calculateOverallRank,
+  calculateStartingEnergy,
+  calculateSubcategoryEnergy,
+  formatDate,
+  getContrastColor,
+  getHighestScenarioRank,
+  isRankComplete,
+  lightenColor,
+} from "./utils";
+import { IoMdRefreshCircle } from "react-icons/io";
 
 export default function App() {
+  const [showSimplifiedNames, setShowSimplifiedNames] = useState(false);
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(
     null
   );
@@ -118,6 +46,51 @@ export default function App() {
   const [difficultyRanks, setDifficultyRanks] = useState<{
     [key: string]: string[];
   }>({});
+
+  const calculateOverallRankForTab = (difficulty: Difficulty): number => {
+    const startingEnergy = calculateStartingEnergy(difficulty, difficultyRanks);
+
+    const subcategoryEnergies: number[] = [];
+    if (!benchmarkData) return 0;
+
+    const totalSubcategories = Object.keys(benchmarkData[difficulty]).reduce(
+      (acc, category) =>
+        acc + Object.keys(benchmarkData[difficulty][category]).length,
+      0
+    );
+
+    Object.entries(benchmarkData[difficulty]).forEach(([, subcategories]) => {
+      Object.entries(subcategories).forEach(([, scenarios]) => {
+        const energy = calculateSubcategoryEnergy(
+          scenarios,
+          scores,
+          startingEnergy
+        );
+        subcategoryEnergies.push(energy);
+      });
+    });
+
+    return calculateHarmonicMean(subcategoryEnergies, totalSubcategories);
+  };
+
+  const simplifyScenarioName = (name: string): string => {
+    if (!showSimplifiedNames) return name;
+
+    // Strip "VT " from the start and " Difficulty S5" from the end
+    return name.replace(/^VT\s/, "").replace(/\s\w+\sS5$/, "");
+  };
+
+  useEffect(() => {
+    const savedState = localStorage.getItem("simplifiedNames");
+    if (savedState !== null) {
+      setShowSimplifiedNames(savedState === "true");
+    }
+  }, []);
+
+  const toggleSimplifiedNames = (checked: boolean) => {
+    setShowSimplifiedNames(checked);
+    localStorage.setItem("simplifiedNames", checked.toString());
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -227,41 +200,26 @@ export default function App() {
 
   useHotkeys([["r", refreshScores]]);
 
-  // Custom hook for persistent tab state
   const usePersistedTab = () => {
     const [activeTab, setActiveTab] = useState<string>("Novice");
-
+  
+    // Load the persisted tab state from localStorage on mount
     useEffect(() => {
-      const loadTab = async () => {
-        try {
-          const saved = await readTextFile("active-tab.txt", {
-            baseDir: BaseDirectory.AppLocalData,
-          });
-          setActiveTab(saved);
-        } catch {
-          const localTab = localStorage.getItem("activeTab");
-          if (localTab) setActiveTab(localTab);
-        }
-      };
-      loadTab();
+      const savedTab = localStorage.getItem("activeTab");
+      if (savedTab) {
+        setActiveTab(savedTab);
+      }
     }, []);
-
-    const updateTab = async (newTab: string) => {
+  
+    // Update the tab state and persist it to localStorage
+    const updateTab = (newTab: string) => {
       setActiveTab(newTab);
       localStorage.setItem("activeTab", newTab);
-      try {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(newTab);
-        await writeFile("active-tab.txt", data, {
-          baseDir: BaseDirectory.AppLocalData,
-        });
-      } catch (e) {
-        console.error("Failed to save to fs:", e);
-      }
     };
-
+  
     return [activeTab, updateTab] as const;
   };
+  
 
   const [activeTab, setActiveTab] = usePersistedTab();
 
@@ -283,25 +241,17 @@ export default function App() {
       RANK_COLORS[overallRank as keyof typeof RANK_COLORS] || "#FFFFFF";
 
     return (
-      <div className="flex justify-center mt-4">
-        <div className="flex flex-col items-center gap-2">
-          <div
-            className="px-6 py-3 rounded-md font-bold text-lg"
-            style={{
-              backgroundColor,
-              color: getContrastColor(backgroundColor),
-            }}
-          >
-            {overallRank}{" "}
-            {rankComplete && overallRank !== "Unranked" ? "Complete" : ""}
-          </div>
-          <div className="text-sm font-bold">
-            Overall Energy:{" "}
-            <span className="font-normal">
-              {parseFloat(overallEnergy.toFixed(1)).toString()}
-            </span>
-          </div>
-        </div>
+      <div className="flex justify-center">
+        <Badge
+          color={backgroundColor}
+          variant="light"
+          size="lg"
+          className="flex items-center gap-2"
+        >
+          <span>{overallRank}</span>
+          {rankComplete && overallRank !== "Unranked" && <span> Complete</span>}
+          <span className="ml-2 text-base">{overallEnergy.toFixed(1)}</span>
+        </Badge>
       </div>
     );
   };
@@ -335,7 +285,7 @@ export default function App() {
 
     return (
       <div className="overflow-x-auto">
-        <Table striped withTableBorder withColumnBorders className="min-w-full">
+        <Table withTableBorder withColumnBorders className="min-w-full">
           <Table.Thead>
             <Table.Tr>
               <Table.Th className="w-24" rowSpan={2}>
@@ -612,7 +562,7 @@ export default function App() {
                               className="font-medium"
                             >
                               <Tooltip label={tooltipContent} withArrow>
-                                <span>{scenario}</span>
+                                <span>{simplifyScenarioName(scenario)}</span>
                               </Tooltip>
                             </Table.Td>
                             {/* High Score Column */}
@@ -750,13 +700,44 @@ export default function App() {
             )}
           </Table.Tbody>
         </Table>
-        {renderOverallRank(difficulty, overallEnergy)}
       </div>
     );
   };
 
   return (
     <Stack className="p-4">
+      <div className="flex justify-between items-center">
+        {/* Render Overall Rank */}
+        <div>
+          {renderOverallRank(
+            activeTab as Difficulty,
+            calculateOverallRankForTab(activeTab as Difficulty)
+          )}
+        </div>
+        {/* Refresh Button */}
+        <Tooltip label="Refresh (R)" withArrow>
+          <ActionIcon
+            onClick={refreshScores}
+            variant="light"
+            color="blue"
+            radius="xl"
+            size="lg"
+          >
+            <IoMdRefreshCircle size={28} />
+          </ActionIcon>
+        </Tooltip>
+        <Switch
+          label={
+            "Simplify Names"
+          }
+          checked={showSimplifiedNames}
+          onChange={(e) => toggleSimplifiedNames(e.currentTarget.checked)}
+        />
+      </div>
+
+      <Divider my="0" />
+
+      {/* Render Tabs */}
       <Tabs
         value={activeTab}
         onChange={(value) => setActiveTab(value as string)}
@@ -775,248 +756,6 @@ export default function App() {
           </Tabs.Panel>
         ))}
       </Tabs>
-      <div className="flex justify-center mb-4">
-        <Button
-          onClick={refreshScores}
-          variant="outline"
-          color="blue"
-          radius="md"
-          size="md"
-        >
-          Refresh Scores [R]
-        </Button>
-      </div>
     </Stack>
   );
 }
-
-const lightenColor = (color: string, percent: number) => {
-  const num = parseInt(color.replace("#", ""), 16);
-  const r = Math.round(
-    ((num >> 16) & 0xff) + (255 - ((num >> 16) & 0xff)) * percent
-  );
-  const g = Math.round(
-    ((num >> 8) & 0xff) + (255 - ((num >> 8) & 0xff)) * percent
-  );
-  const b = Math.round((num & 0xff) + (255 - (num & 0xff)) * percent);
-  // Ensure output is always a valid hex format
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
-};
-
-const getContrastColor = (color: string) => {
-  let r, g, b;
-
-  if (color.startsWith("#")) {
-    const num = parseInt(color.replace("#", ""), 16);
-    r = (num >> 16) & 0xff;
-    g = (num >> 8) & 0xff;
-    b = num & 0xff;
-  } else if (color.startsWith("rgb")) {
-    const rgb = color.match(/\d+/g)?.map(Number).slice(0, 3); // Extract RGB components
-    if (rgb) [r, g, b] = rgb;
-  }
-
-  if (r === undefined || g === undefined || b === undefined) {
-    return "#000"; // Fallback to black if parsing fails
-  }
-
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000; // Relative luminance formula
-  return brightness > 186 ? "#000" : "#FFF"; // Black for light backgrounds, White for dark
-};
-
-// Helper function to calculate starting energy for each difficulty
-const calculateStartingEnergy = (
-  difficulty: Difficulty,
-  difficultyRanks: { [key: string]: string[] }
-) => {
-  const difficulties = ["Novice", "Intermediate", "Advanced"] as Difficulty[];
-  const difficultyIndex = difficulties.indexOf(difficulty);
-
-  // Calculate cumulative energy from previous difficulties
-  let startingEnergy = 0;
-  for (let i = 0; i < difficultyIndex; i++) {
-    const numRanks = difficultyRanks[difficulties[i]]?.length || 0;
-    startingEnergy += numRanks * ENERGY_INCREMENT;
-  }
-
-  // Add base energy to the starting point
-  return startingEnergy + ENERGY_BASE;
-};
-
-const calculateHarmonicMean = (values: number[], expectedCount: number) => {
-  if (values.length !== expectedCount || values.some((v) => v === 0)) return 0;
-  const reciprocalSum = values.reduce((sum, value) => sum + 1 / value, 0);
-  return values.length / reciprocalSum;
-};
-
-const calculateOverallRank = (
-  energy: number,
-  difficulty: Difficulty,
-  difficultyRanks: { [key: string]: string[] }
-) => {
-  const ranks = difficultyRanks[difficulty];
-  const startingEnergy = calculateStartingEnergy(difficulty, difficultyRanks);
-
-  for (let i = ranks.length - 1; i >= 0; i--) {
-    const rankEnergy = startingEnergy + i * ENERGY_INCREMENT;
-    if (energy >= rankEnergy) {
-      return ranks[i];
-    }
-  }
-  return "Unranked";
-};
-
-const isRankComplete = (
-  scores: BenchmarkState,
-  benchmarkData: BenchmarkData,
-  difficulty: Difficulty,
-  rank: string
-) => {
-  let allScenariosComplete = true;
-
-  Object.values(benchmarkData[difficulty]).forEach((categories) => {
-    Object.values(categories).forEach((scenarios) => {
-      Object.entries(scenarios).forEach(([scenario, thresholds]) => {
-        const scoreData = scores[scenario];
-        if (scoreData && thresholds[rank]) {
-          if (scoreData.highScore < thresholds[rank]) {
-            allScenariosComplete = false;
-          }
-        }
-      });
-    });
-  });
-
-  return allScenariosComplete;
-};
-
-// Format tooltip content
-const formatDate = (dateString: string) => {
-  if (!dateString) return "-";
-  const [datePart, timePart] = dateString.split("-");
-  const [year, month, day] = datePart.split(".");
-  const [hour, minute, second] = timePart.split(".");
-  const date = new Date(
-    parseInt(year),
-    parseInt(month) - 1,
-    parseInt(day),
-    parseInt(hour),
-    parseInt(minute),
-    parseInt(second)
-  );
-  return date.toLocaleString();
-};
-
-const calculateScenarioEnergy = (
-  score: number,
-  thresholds: Threshold,
-  startingEnergy: number
-): number => {
-  const rankThresholds = Object.entries(thresholds)
-    .sort(([, a], [, b]) => a - b)
-    .map(([rank, threshold]) => ({ rank, threshold }));
-
-  // Calculate fake lower rank threshold
-  const lowestRank = rankThresholds[0];
-  const secondLowestRank = rankThresholds[1];
-  const fakeLowerThreshold =
-    lowestRank.threshold - (secondLowestRank.threshold - lowestRank.threshold);
-
-  // Calculate fake upper rank threshold
-  const highestRank = rankThresholds[rankThresholds.length - 1];
-  const secondHighestRank = rankThresholds[rankThresholds.length - 2];
-  const fakeUpperThreshold =
-    highestRank.threshold +
-    (highestRank.threshold - secondHighestRank.threshold);
-
-  // Handle score below fake lower threshold
-  if (score < fakeLowerThreshold) {
-    return (score / fakeLowerThreshold) * (startingEnergy - ENERGY_INCREMENT);
-  }
-
-  // Handle score between fake lower threshold and lowest real threshold
-  if (score < rankThresholds[0].threshold) {
-    const progress =
-      (score - fakeLowerThreshold) /
-      (lowestRank.threshold - fakeLowerThreshold);
-    return startingEnergy - ENERGY_INCREMENT + progress * ENERGY_INCREMENT;
-  }
-
-  // Add fake ranks to the thresholds array
-  const extendedThresholds = [
-    { rank: "FakeLower", threshold: fakeLowerThreshold },
-    ...rankThresholds,
-    { rank: "FakeUpper", threshold: fakeUpperThreshold },
-  ];
-
-  // Find appropriate threshold range and calculate energy
-  for (let i = 1; i < extendedThresholds.length; i++) {
-    const current = extendedThresholds[i];
-    const previous = extendedThresholds[i - 1];
-
-    if (score >= previous.threshold && score < current.threshold) {
-      const progress =
-        (score - previous.threshold) / (current.threshold - previous.threshold);
-      return (
-        startingEnergy +
-        (i - 2) * ENERGY_INCREMENT +
-        progress * ENERGY_INCREMENT
-      );
-    }
-  }
-
-  // Score is above the highest threshold
-  return (
-    startingEnergy +
-    (rankThresholds.length - 1) * ENERGY_INCREMENT +
-    ENERGY_INCREMENT
-  );
-};
-
-const calculateSubcategoryEnergy = (
-  scenarios: { [key: string]: Threshold },
-  scores: BenchmarkState,
-  startingEnergy: number
-): number => {
-  let maxEnergy = 0;
-
-  Object.entries(scenarios).forEach(([scenario, thresholds]) => {
-    const scoreData = scores[scenario];
-    if (scoreData && thresholds) {
-      const energy = calculateScenarioEnergy(
-        scoreData.highScore,
-        thresholds,
-        startingEnergy
-      );
-      maxEnergy = Math.max(maxEnergy, energy);
-    }
-  });
-
-  return maxEnergy;
-};
-
-const getHighestScenarioRank = (
-  scenarios: { [key: string]: Threshold },
-  scores: BenchmarkState
-) => {
-  let highestRank = "Unranked";
-  let highestThresholdMet = -Infinity;
-
-  Object.entries(scenarios).forEach(([scenario, thresholds]) => {
-    const scoreData = scores[scenario];
-    if (scoreData) {
-      // Find the highest rank achieved for this scenario
-      for (const [rank, threshold] of Object.entries(thresholds)) {
-        if (
-          scoreData.highScore >= threshold &&
-          threshold > highestThresholdMet
-        ) {
-          highestRank = rank;
-          highestThresholdMet = threshold;
-        }
-      }
-    }
-  });
-
-  return highestRank;
-};

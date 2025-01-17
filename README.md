@@ -1,6 +1,7 @@
 # Voltaic Season 5 Benchmark Tracker
 
-A local benchmark tracker for Voltaic Season 5, that gets the scores directly from the game files, built with Tauri, using a React frontend. This is still work in progress and may have issues. The score requirements and scenario names are fetched from a gist, so changes do not require the app to be updated.
+A local benchmark tracker for Voltaic Season 5, that gets the scores directly from the game files, so you don't need to update a spreadsheet manually.
+This is still work in progress and may have issues. The score requirements and scenario names are fetched from a gist, so sdcore threshold changes do not require the app to be updated.
 
 ## Prerequisites
 
@@ -23,6 +24,11 @@ To start the application in development mode, run:
 npx tauri dev
 ```
 
-## Screenshot
+To build an executable run:
+```
+npx tauri build
+```
+The output will be in '\src-tauri\target\release'
+## Example screenshot
 
-![Image of tool](example.png)
+![Image of tool](example.png)![Image of tool](image.png)

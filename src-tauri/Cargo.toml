@@ -15,14 +15,14 @@ name = "vt_s5_benchmark_tracker_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-winreg = "0.52"
+tauri = { version = "2.2", features = [] }
+tauri-plugin-opener = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+winreg = "0.55.0"
 
 # Development profile - faster compilation, larger size
 [profile.dev]
