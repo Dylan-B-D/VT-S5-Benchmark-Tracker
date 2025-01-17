@@ -1,7 +1,8 @@
 # Voltaic Season 5 Benchmark Tracker
 
-A local benchmark tracker for Voltaic Season 5, that gets the scores directly from the game files, so you don't need to update a spreadsheet manually.
-This is still work in progress and may have issues. The score requirements and scenario names are fetched from a gist, so sdcore threshold changes do not require the app to be updated.
+- This is still work in progress and may have issues.
+- A local benchmark tracker for Voltaic Season 5, that gets the scores directly from the game files, so you don't need to update a spreadsheet manually.
+- The score requirements and scenario names are fetched from a gist, so score threshold changes do not require the app to be updated.
 
 ## Prerequisites
 
