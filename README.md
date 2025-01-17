@@ -31,4 +31,4 @@ npx tauri build
 The output will be in '\src-tauri\target\release'
 ## Example screenshot
 
-![Image of tool](example.png)![Image of tool](image.png)
+![Image of tool](image.png)
