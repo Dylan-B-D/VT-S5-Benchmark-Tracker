@@ -31,7 +31,6 @@ import {
   calculateSubcategoryEnergy,
   formatDate,
   getContrastColor,
-  getHighestScenarioRank,
   isRankComplete,
   lightenColor,
 } from "./utils";
