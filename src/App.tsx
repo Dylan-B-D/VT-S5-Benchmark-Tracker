@@ -202,7 +202,7 @@ export default function App() {
 
   const usePersistedTab = () => {
     const [activeTab, setActiveTab] = useState<string>("Novice");
-  
+
     // Load the persisted tab state from localStorage on mount
     useEffect(() => {
       const savedTab = localStorage.getItem("activeTab");
@@ -210,16 +210,15 @@ export default function App() {
         setActiveTab(savedTab);
       }
     }, []);
-  
+
     // Update the tab state and persist it to localStorage
     const updateTab = (newTab: string) => {
       setActiveTab(newTab);
       localStorage.setItem("activeTab", newTab);
     };
-  
+
     return [activeTab, updateTab] as const;
   };
-  
 
   const [activeTab, setActiveTab] = usePersistedTab();
 
@@ -520,6 +519,19 @@ export default function App() {
                           </div>
                         );
 
+                        // Calculate the subcategory energy
+                        const subcategoryEnergy = calculateSubcategoryEnergy(
+                          scenarios,
+                          scores,
+                          startingEnergy
+                        );
+
+                        const subcategoryRank = calculateOverallRank(
+                          subcategoryEnergy,
+                          difficulty,
+                          difficultyRanks
+                        );
+
                         return (
                           <Table.Tr
                             key={`${category}-${subcategory}-${scenario}`}
@@ -622,46 +634,28 @@ export default function App() {
                                 className="w-32 text-center"
                                 style={{
                                   backgroundColor:
-                                    getHighestScenarioRank(
-                                      scenarios,
-                                      scores
-                                    ) === "Unranked"
+                                    subcategoryRank === "Unranked"
                                       ? "none"
                                       : lightenColor(
                                           RANK_COLORS[
-                                            getHighestScenarioRank(
-                                              scenarios,
-                                              scores
-                                            ) as keyof typeof RANK_COLORS
-                                          ] || "none",
+                                            subcategoryRank as keyof typeof RANK_COLORS
+                                          ] || "#FFFFFF",
                                           0.5
                                         ),
                                   color:
-                                    getHighestScenarioRank(
-                                      scenarios,
-                                      scores
-                                    ) === "Unranked"
+                                    subcategoryRank === "Unranked"
                                       ? "#FFFFFF"
                                       : getContrastColor(
                                           lightenColor(
                                             RANK_COLORS[
-                                              getHighestScenarioRank(
-                                                scenarios,
-                                                scores
-                                              ) as keyof typeof RANK_COLORS
-                                            ] || "none",
+                                              subcategoryRank as keyof typeof RANK_COLORS
+                                            ] || "#FFFFFF",
                                             0.5
                                           )
                                         ),
                                 }}
                               >
-                                {Math.floor(
-                                  calculateSubcategoryEnergy(
-                                    scenarios,
-                                    scores,
-                                    startingEnergy
-                                  )
-                                ).toLocaleString()}
+                                {Math.floor(subcategoryEnergy).toLocaleString()}
                               </Table.Td>
                             )}
                             {/* Rank Threshold Columns */}
@@ -727,9 +721,7 @@ export default function App() {
           </ActionIcon>
         </Tooltip>
         <Switch
-          label={
-            "Simplify Names"
-          }
+          label={"Simplify Names"}
           checked={showSimplifiedNames}
           onChange={(e) => toggleSimplifiedNames(e.currentTarget.checked)}
         />
